@@ -55,3 +55,6 @@ dist/
 
 # Windows
 $RECYCLE.BIN/
+
+# Backup artifacts
+.git.backup/
