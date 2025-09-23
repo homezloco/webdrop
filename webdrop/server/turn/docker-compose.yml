@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  coturn:
+    image: instrumentisto/coturn:latest
+    container_name: webdrop-coturn
+    restart: unless-stopped
+    # Use explicit ports for cross-platform compatibility (Docker Desktop)
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      # Uncomment if you enable TLS in turnserver.conf
+      # - "5349:5349/tcp"
+    environment:
+      # These envs let our turnserver.conf template use your credentials
+      - TURN_USERNAME=${TURN_USERNAME:-webdrop}
+      - TURN_PASSWORD=${TURN_PASSWORD:-webdrop-secret}
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+      # Uncomment if you enable TLS in turnserver.conf and place certs here
+      # - ./certs:/certs:ro

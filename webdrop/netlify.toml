@@ -1,0 +1,13 @@
+[build]
+  command = "npm ci && npm run build"
+  publish = ".next"
+
+# If you later move the app into a subfolder, set base here, e.g.:
+# base = "webdrop"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Explicit Next.js plugin (optional for Next 15+, but keeps config explicit)
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

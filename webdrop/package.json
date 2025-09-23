@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "webdrop",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k \"next dev --turbopack\" \"ts-node server/signaling.ts\"",
+    "build": "next build --turbopack && npm run build:signaling",
+    "build:signaling": "tsc -p server/tsconfig.json",
+    "start": "concurrently -k \"next start\" \"node server-dist/signaling.js\"",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@sentry/nextjs": "^8.35.0",
+    "nanoid": "^5.0.7",
+    "next": "15.5.3",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-qr-code": "^2.0.18",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/ws": "^8.5.12",
+    "concurrently": "^9.0.1",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.3",
+    "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5"
+  }
+}
