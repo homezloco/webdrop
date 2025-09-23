@@ -1,0 +1,57 @@
+# General
+.DS_Store
+Thumbs.db
+
+# Node / Next.js
+node_modules/
+.next/
+.next-static/
+.next/cache/
+.next/server/
+out/
+.eslintcache
+.npmrc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+*.log.*
+lerna-debug.log*
+
+# Coverage / testing
+coverage/
+*.lcov
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+build/
+dist/
+.tmp/
+.temp/
+
+# TypeScript
+*.tsbuildinfo
+
+# Images / cache
+.cache/
+
+# Mac
+.AppleDouble
+.LSOverride
+
+# Windows
+$RECYCLE.BIN/
