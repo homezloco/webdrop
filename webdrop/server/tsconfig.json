@@ -9,7 +9,9 @@
     "target": "ES2019",
     "lib": ["es2020"],
     "allowJs": false,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["node"],
+    "plugins": []
   },
   "include": ["./**/*.ts"],
   "exclude": ["../node_modules", "../src"]
