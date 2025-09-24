@@ -8,7 +8,10 @@
     "build": "next build --turbopack && npm run build:signaling",
     "build:signaling": "tsc -p server/tsconfig.json",
     "start": "concurrently -k \"next start\" \"node server-dist/signaling.js\"",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@sentry/nextjs": "^8.35.0",
@@ -32,6 +35,7 @@
     "eslint-config-next": "15.5.3",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^2.0.5"
   }
 }

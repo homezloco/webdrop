@@ -9,8 +9,11 @@ import Timer from "@/components/Timer";
 import ProgressList from "@/components/ProgressList";
 import ManualSignalPanel from "@/components/ManualSignalPanel";
 import TurnNotice from "@/components/TurnNotice";
+import { useToast } from "@/components/ToastProvider";
+import TransferStats from "@/components/TransferStats";
 
 export default function HostPage() {
+  const { show } = useToast();
   const [roomId, setRoomId] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
@@ -20,6 +23,9 @@ export default function HostPage() {
   const signaling = useRef<SignalingClient | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
+  const [bytesSent, setBytesSent] = useState(0);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [backpressure, setBackpressure] = useState(false);
 
   const joinUrl = useMemo(() => {
     if (!roomId || !token) return "";
@@ -35,7 +41,23 @@ export default function HostPage() {
         sig.createRoom();
       },
       onClose: () => setStatus("signaling_closed"),
-      onError: () => setStatus("signaling_error"),
+      onError: (e) => {
+        setStatus("signaling_error");
+        show({ variant: "error", title: "Signaling error", message: (e as Error)?.message || "WebSocket error" });
+      },
+      onReconnectAttempt: (attempt, delayMs) => {
+        setStatus("reconnecting");
+        show({ variant: "warning", title: "Reconnecting", message: `Attempt ${attempt} in ${Math.ceil(delayMs/1000)}s…` });
+      },
+      onReconnectSuccess: () => {
+        setStatus("signaling_connected");
+        show({ variant: "success", title: "Reconnected", message: "Signaling connection restored." });
+      },
+      onReconnectGiveUp: (attempts) => {
+        setStatus("signaling_error");
+        show({ variant: "error", title: "Connection lost", message: `Unable to reconnect after ${attempts} attempts.` });
+        setShowManual(true);
+      },
       onMessage: async (msg: AnyInbound) => {
         if (msg.type === "room_created") {
           setRoomId(msg.payload.roomId);
@@ -92,21 +114,30 @@ export default function HostPage() {
   function onDropFiles(files: FileList | null) {
     if (!files || !channelRef.current) return;
     const dc = channelRef.current;
+    if (!startedAt) setStartedAt(Date.now());
     for (const file of Array.from(files)) {
       const reader = file.stream().getReader();
       const header = JSON.stringify({ name: file.name, size: file.size, type: file.type });
       const id = `${file.name}-${Date.now()}`;
       setItems((prev) => [...prev, { id, name: file.name, size: file.size, transferred: 0, done: false }]);
       dc.send(header);
+      // update telemetry for header
+      setBytesSent((b) => b + new Blob([header]).size);
       const pump = (): Promise<void> =>
         reader.read().then(({ done, value }): Promise<void> => {
           if (done) {
             dc.send("__EOF__");
+            setBytesSent((b) => b + new Blob(["__EOF__"]).size);
             setItems((prev) => prev.map((it) => it.id === id ? { ...it, transferred: it.size, done: true } : it));
             return Promise.resolve();
           }
           if (value) {
-            try { dc.send(value); } catch (e) {
+            try {
+              dc.send(value);
+              setBytesSent((b) => b + value.byteLength);
+              const buffered = dc.bufferedAmount || 0;
+              setBackpressure(buffered > 1_000_000); // ~1MB buffer threshold
+            } catch (e) {
               setItems((prev) => prev.map((it) => it.id === id ? { ...it, error: 'send_error' } : it));
               return Promise.resolve();
             }
@@ -142,10 +173,23 @@ export default function HostPage() {
           <QRCode value={joinUrl} size={180} />
           <code className="text-xs break-all p-2 bg-neutral-100 rounded w-full text-center">{joinUrl}</code>
           <button
-            onClick={() => navigator.clipboard?.writeText(joinUrl)}
+            onClick={() => { navigator.clipboard?.writeText(joinUrl); show({ variant: "success", message: "Join link copied" }); }}
             className="text-xs px-2 py-1 rounded border hover:bg-neutral-100"
             aria-label="Copy join link"
           >Copy Link</button>
+          {roomId ? (
+            <div className="w-full text-center space-y-1 mt-2">
+              <div className="text-xs text-neutral-500">Room code</div>
+              <code className="text-xs p-2 bg-neutral-100 rounded w-full inline-block">{roomId}</code>
+              <div>
+                <button
+                  onClick={() => { navigator.clipboard?.writeText(roomId); show({ variant: "success", message: "Room code copied" }); }}
+                  className="text-xs px-2 py-1 rounded border hover:bg-neutral-100"
+                  aria-label="Copy room code"
+                >Copy Room Code</button>
+              </div>
+            </div>
+          ) : null}
           {expiresAt && (
             <p className="text-xs text-neutral-500">Expires at: {new Date(expiresAt).toLocaleTimeString()}</p>
           )}
@@ -167,6 +211,9 @@ export default function HostPage() {
         <div>
           <h2 className="font-medium">Transfers</h2>
           <ProgressList items={items} />
+          <div className="mt-3">
+            <TransferStats totalBytes={bytesSent} sinceTs={startedAt} label="Sent" backpressure={backpressure} />
+          </div>
         </div>
       )}
       <div className="flex justify-end">

@@ -8,8 +8,11 @@ import { applyRemoteDescription, createPeer, makeAnswer, onIceCandidate } from "
 import ProgressList from "@/components/ProgressList";
 import ManualSignalPanel from "@/components/ManualSignalPanel";
 import TurnNotice from "@/components/TurnNotice";
+import { useToast } from "@/components/ToastProvider";
+import TransferStats from "@/components/TransferStats";
 
 export default function JoinPage() {
+  const { show } = useToast();
   const params = useParams<{ roomId: string }>();
   const search = useSearchParams();
   const token = search.get("token");
@@ -18,6 +21,8 @@ export default function JoinPage() {
   const [status, setStatus] = useState("initializing");
   const [items, setItems] = useState<{ id: string; name: string; size: number; type: string; transferred: number; done: boolean; url?: string }[]>([]);
   const [showManual, setShowManual] = useState<boolean>(false);
+  const [bytesReceived, setBytesReceived] = useState(0);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
 
   const signaling = useRef<SignalingClient | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
@@ -34,7 +39,23 @@ export default function JoinPage() {
         sig.joinRoom(roomId, token);
       },
       onClose: () => setStatus("signaling_closed"),
-      onError: () => setStatus("signaling_error"),
+      onError: (e) => {
+        setStatus("signaling_error");
+        show({ variant: "error", title: "Signaling error", message: (e as Error)?.message || "WebSocket error" });
+      },
+      onReconnectAttempt: (attempt, delayMs) => {
+        setStatus("reconnecting");
+        show({ variant: "warning", title: "Reconnecting", message: `Attempt ${attempt} in ${Math.ceil(delayMs/1000)}s…` });
+      },
+      onReconnectSuccess: () => {
+        setStatus("signaling_connected");
+        show({ variant: "success", title: "Reconnected", message: "Signaling connection restored." });
+      },
+      onReconnectGiveUp: (attempts) => {
+        setStatus("signaling_error");
+        show({ variant: "error", title: "Connection lost", message: `Unable to reconnect after ${attempts} attempts.` });
+        setShowManual(true);
+      },
       onMessage: async (msg: AnyInbound) => {
         if (msg.type === "room_joined") {
           setStatus("joined");
@@ -65,11 +86,13 @@ export default function JoinPage() {
                     const id = `${meta.name}-${Date.now()}`;
                     currentMeta = { id, name: meta.name, size: meta.size, type: meta.type || "" };
                     setItems((prev) => [...prev, { id, name: meta.name, size: meta.size, type: meta.type || "", transferred: 0, done: false }]);
+                    if (!startedAt) setStartedAt(Date.now());
                     return;
                   }
                 } catch { /* ignore non-json */ }
               } else if (data instanceof ArrayBuffer) {
                 receivedChunks.push(new Uint8Array(data));
+                setBytesReceived((b) => b + (data.byteLength || 0));
                 if (currentMeta) {
                   setItems((prev) => prev.map((it) => it.id === currentMeta!.id ? { ...it, transferred: Math.min(it.transferred + (data.byteLength || 0), it.size) } : it));
                 }
@@ -125,7 +148,14 @@ export default function JoinPage() {
       {(status === "signaling_error" || showManual) && (
         <ManualSignalPanel mode="guest" onConnected={() => setStatus("connected")} />
       )}
-      {items.length === 0 ? <p className="text-neutral-600">Waiting for files…</p> : <ProgressList items={items.map(({ id, name, size, transferred, done }) => ({ id, name, size, transferred, done })) as any} />}
+      {items.length === 0 ? <p className="text-neutral-600">Waiting for files…</p> : (
+        <>
+          <ProgressList items={items.map(({ id, name, size, transferred, done }) => ({ id, name, size, transferred, done })) as any} />
+          <div className="mt-3">
+            <TransferStats totalBytes={bytesReceived} sinceTs={startedAt} label="Received" />
+          </div>
+        </>
+      )}
       {items.some((it) => it.url) && (
         <div>
           <h2 className="font-medium mt-4">Ready to save</h2>

@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: webdrop
+
+      - name: Type check
+        run: npm run typecheck
+        working-directory: webdrop
+
+      - name: Lint
+        run: npm run lint || true
+        working-directory: webdrop
+
+      - name: Run unit tests
+        run: npm test -- --run
+        working-directory: webdrop
+
+      - name: Build
+        run: npm run build
+        working-directory: webdrop

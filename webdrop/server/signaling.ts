@@ -3,35 +3,13 @@ import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { setInterval } from 'timers';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
+import { RateLimiter } from './rateLimiter';
 
 // Basic config
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const WS_PATH = '/ws';
 const ROOM_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_MSG_BYTES = 64 * 1024; // 64KB per signaling frame
-
-// Simple IP-based token bucket rate limiter
-class RateLimiter {
-  private buckets = new Map<string, { tokens: number; lastRefill: number }>();
-  constructor(private capacity: number, private refillPerSec: number) {}
-  allow(key: string): boolean {
-    const now = Date.now();
-    const bucket = this.buckets.get(key) || { tokens: this.capacity, lastRefill: now };
-    const elapsed = (now - bucket.lastRefill) / 1000;
-    const refill = Math.floor(elapsed * this.refillPerSec);
-    if (refill > 0) {
-      bucket.tokens = Math.min(this.capacity, bucket.tokens + refill);
-      bucket.lastRefill = now;
-    }
-    if (bucket.tokens <= 0) {
-      this.buckets.set(key, bucket);
-      return false;
-    }
-    bucket.tokens -= 1;
-    this.buckets.set(key, bucket);
-    return true;
-  }
-}
 const rateLimiter = new RateLimiter(30, 3); // up to ~30 ops burst, ~3 ops/sec sustained per IP
 
 // Room store
@@ -216,7 +194,18 @@ setInterval(() => {
   }
 }, 30 * 1000);
 
-server.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`[signaling] listening on :${PORT}${WS_PATH}`);
-});
+export function startSignaling(port = PORT) {
+  server.listen(port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`[signaling] listening on :${port}${WS_PATH}`);
+  });
+  return server;
+}
+
+// Only auto-start when executed directly (e.g., node server-dist/signaling.js)
+// Avoids binding a port when imported (e.g., from tests)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const isMain = (require as any)?.main === module;
+if (isMain) {
+  startSignaling(PORT);
+}
