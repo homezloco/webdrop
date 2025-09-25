@@ -42,15 +42,15 @@ kill_port() {
 kill_port "$FRONTEND_PORT"
 kill_port "$BACKEND_PORT"
 
-# Point frontend to backend signaling URL
-export PORT="$BACKEND_PORT"
-export NEXT_PUBLIC_SIGNALING_URL="ws://localhost:${BACKEND_PORT}/ws"
-
-# Optional: load additional envs from .env.local if present
+# Optional: load additional envs from .env.local if present (but BACKEND_PORT wins)
 if [ -f ".env.local" ]; then
   # shellcheck disable=SC2046
   export $(grep -v '^#' .env.local | xargs -I {} echo {}) || true
 fi
+
+# Point frontend to backend signaling URL (override any PORT brought by .env.local)
+export PORT="$BACKEND_PORT"
+export NEXT_PUBLIC_SIGNALING_URL="ws://localhost:${BACKEND_PORT}/ws"
 
 # Start both services using local dev dependencies
 # - Next.js on FRONTEND_PORT
@@ -59,4 +59,4 @@ echo "[start.sh] Starting frontend on :${FRONTEND_PORT} and backend on :${BACKEN
 
 npx concurrently -k \
   "npx next dev -p ${FRONTEND_PORT}" \
-  "npx ts-node server/signaling.ts"
+  "PORT=${BACKEND_PORT} npx ts-node server/signaling.ts"

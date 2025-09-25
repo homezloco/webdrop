@@ -3,9 +3,16 @@ import { z } from 'zod';
 export const CreateRoom = z.object({ type: z.literal('create_room') });
 export type CreateRoom = z.infer<typeof CreateRoom>;
 
+export const ICEUrls = z.union([z.string(), z.array(z.string())]);
+export const RTCIceServerSchema = z.object({
+  urls: ICEUrls,
+  username: z.string().optional(),
+  credential: z.string().optional(),
+});
+
 export const RoomCreated = z.object({
   type: z.literal('room_created'),
-  payload: z.object({ roomId: z.string(), joinToken: z.string(), expiresAt: z.number() }),
+  payload: z.object({ roomId: z.string(), joinToken: z.string(), expiresAt: z.number(), iceServers: z.array(RTCIceServerSchema).optional() }),
 });
 export type RoomCreated = z.infer<typeof RoomCreated>;
 
@@ -17,7 +24,7 @@ export type JoinRoom = z.infer<typeof JoinRoom>;
 
 export const RoomJoined = z.object({
   type: z.literal('room_joined'),
-  payload: z.object({ roomId: z.string() }),
+  payload: z.object({ roomId: z.string(), iceServers: z.array(RTCIceServerSchema).optional() }),
 });
 export type RoomJoined = z.infer<typeof RoomJoined>;
 

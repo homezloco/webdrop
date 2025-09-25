@@ -3,42 +3,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.startSignaling = startSignaling;
 const http_1 = __importDefault(require("http"));
 const ws_1 = require("ws");
 const timers_1 = require("timers");
 const crypto_1 = require("crypto");
 const zod_1 = require("zod");
+const rateLimiter_1 = require("./rateLimiter");
 // Basic config
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const WS_PATH = '/ws';
 const ROOM_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_MSG_BYTES = 64 * 1024; // 64KB per signaling frame
-// Simple IP-based token bucket rate limiter
-class RateLimiter {
-    constructor(capacity, refillPerSec) {
-        this.capacity = capacity;
-        this.refillPerSec = refillPerSec;
-        this.buckets = new Map();
-    }
-    allow(key) {
-        const now = Date.now();
-        const bucket = this.buckets.get(key) || { tokens: this.capacity, lastRefill: now };
-        const elapsed = (now - bucket.lastRefill) / 1000;
-        const refill = Math.floor(elapsed * this.refillPerSec);
-        if (refill > 0) {
-            bucket.tokens = Math.min(this.capacity, bucket.tokens + refill);
-            bucket.lastRefill = now;
-        }
-        if (bucket.tokens <= 0) {
-            this.buckets.set(key, bucket);
-            return false;
-        }
-        bucket.tokens -= 1;
-        this.buckets.set(key, bucket);
-        return true;
-    }
-}
-const rateLimiter = new RateLimiter(30, 3); // up to ~30 ops burst, ~3 ops/sec sustained per IP
+const rateLimiter = new rateLimiter_1.RateLimiter(30, 3); // up to ~30 ops burst, ~3 ops/sec sustained per IP
 const rooms = new Map();
 // zod schemas for messages
 const msgBase = zod_1.z.object({ type: zod_1.z.string() });
@@ -246,7 +223,17 @@ wss.on('connection', (ws, req) => {
         }
     }
 }, 30 * 1000);
-server.listen(PORT, () => {
-    // eslint-disable-next-line no-console
-    console.log(`[signaling] listening on :${PORT}${WS_PATH}`);
-});
+function startSignaling(port = PORT) {
+    server.listen(port, () => {
+        // eslint-disable-next-line no-console
+        console.log(`[signaling] listening on :${port}${WS_PATH}`);
+    });
+    return server;
+}
+// Only auto-start when executed directly (e.g., node server-dist/signaling.js)
+// Avoids binding a port when imported (e.g., from tests)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const isMain = (require === null || require === void 0 ? void 0 : require.main) === module;
+if (isMain) {
+    startSignaling(PORT);
+}

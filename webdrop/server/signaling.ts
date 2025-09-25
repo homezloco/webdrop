@@ -1,7 +1,7 @@
 import http from 'http';
 import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { setInterval } from 'timers';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHmac } from 'crypto';
 import { z } from 'zod';
 import { RateLimiter } from './rateLimiter';
 
@@ -65,6 +65,33 @@ server.on('upgrade', (req: http.IncomingMessage, socket, head) => {
   });
 });
 
+function mintTurnCredentials(): { username: string; credential: string } | null {
+  const secret = process.env.TURN_SHARED_SECRET;
+  const realm = process.env.TURN_REALM || 'webdrop';
+  if (!secret) return null;
+  // Username as epoch expiry (now + 1 hour)
+  const expiry = Math.floor(Date.now() / 1000) + 3600;
+  const username = `${expiry}`;
+  const hmac = createHmac('sha1', secret);
+  hmac.update(username);
+  const credential = hmac.digest('base64');
+  return { username: `${username}`, credential };
+}
+
+function buildIceServers(): Array<{ urls: string | string[]; username?: string; credential?: string }> | undefined {
+  const turnUrl = process.env.TURN_URL || process.env.NEXT_PUBLIC_TURN_URL;
+  const stunStr = process.env.STUN_URLS || process.env.NEXT_PUBLIC_STUN_URLS;
+  const stunUrls = stunStr ? stunStr.split(',').map((s) => s.trim()).filter(Boolean) : ['stun:stun.l.google.com:19302'];
+  const base: Array<{ urls: string | string[]; username?: string; credential?: string }> = [{ urls: stunUrls }];
+  if (turnUrl) {
+    const creds = mintTurnCredentials();
+    if (creds) {
+      base.push({ urls: [turnUrl], username: creds.username, credential: creds.credential });
+    }
+  }
+  return base.length > 0 ? base : undefined;
+}
+
 wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
   const ip = ipFromReq(req);
   let boundRoomId: string | null = null;
@@ -107,7 +134,8 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
       boundRoomId = id;
       role = 'host';
       console.log(JSON.stringify({ at: new Date().toISOString(), evt: 'room_created', ip, roomId: id, expiresAt: room.expiresAt }));
-      safeSend(ws, { type: 'room_created', payload: { roomId: id, joinToken: token, expiresAt: room.expiresAt } });
+      const iceServers = buildIceServers();
+      safeSend(ws, { type: 'room_created', payload: { roomId: id, joinToken: token, expiresAt: room.expiresAt, iceServers } });
       return;
     }
 
@@ -124,7 +152,8 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
       boundRoomId = roomId;
       role = 'guest';
       console.log(JSON.stringify({ at: new Date().toISOString(), evt: 'room_joined', ip, roomId }));
-      safeSend(ws, { type: 'room_joined', payload: { roomId } });
+      const iceServers = buildIceServers();
+      safeSend(ws, { type: 'room_joined', payload: { roomId, iceServers } });
       if (room.host) { safeSend(room.host, { type: 'guest_joined', payload: { roomId } }); }
       return;
     }
